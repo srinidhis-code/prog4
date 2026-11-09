@@ -37,6 +37,12 @@ var ambientULoc; // where to put ambient reflecivity for fragment shader
 var diffuseULoc; // where to put diffuse reflecivity for fragment shader
 var specularULoc; // where to put specular reflecivity for fragment shader
 var shininessULoc; // where to put specular exponent for fragment shader
+var eyePositionULoc; // where to put eye position for fragment shader
+var blendModeULoc; // where to put light/texture blend mode for fragment shader
+
+/* light and texture blending (Part 3), cycled with the b key */
+const BLEND_MODE_NAMES = ["modulate (lighting × texture)", "replace (texture only)", "lighting only"];
+var blendMode = 0; // index into BLEND_MODE_NAMES
 
 /* interaction variables */
 var Eye = vec3.clone(defaultEye); // eye position in world space
@@ -74,7 +80,14 @@ function getJSONFile(url,descr) {
 
 // does stuff when keys are pressed
 function handleKeyDown(event) {
-    
+
+    // ignore keys while the user is typing in a page field (e.g. a URL)
+    if (event.target.tagName == "INPUT" && event.target.type == "text")
+        return;
+    // stop space and arrow keys from scrolling the page now that it has controls
+    if (["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(event.code) >= 0)
+        event.preventDefault();
+
     const modelEnum = {TRIANGLES: "triangles", ELLIPSOID: "ellipsoid"}; // enumerated model type
     const dirEnum = {NEGATIVE: -1, POSITIVE: 1}; // enumerated rotation direction
     
@@ -185,6 +198,12 @@ function handleKeyDown(event) {
             Center = vec3.copy(Center,defaultCenter);
             Up = vec3.copy(Up,defaultUp);
             break;
+
+        // rendering modes
+        case "KeyB": // cycle how lighting and texture are blended
+            blendMode = (blendMode + 1) % BLEND_MODE_NAMES.length;
+            showModes();
+            break;
             
         // model transformation
         case "KeyK": // translate left, rotate left with shift
@@ -231,8 +250,8 @@ function handleKeyDown(event) {
             } // end for all triangle sets
             for (var whichEllipsoid=0; whichEllipsoid<numEllipsoids; whichEllipsoid++) {
                 vec3.set(inputEllipsoids[whichEllipsoid].translation,0,0,0);
-                vec3.set(inputEllipsoids[whichTriSet].xAxis,1,0,0);
-                vec3.set(inputEllipsoids[whichTriSet].yAxis,0,1,0);
+                vec3.set(inputEllipsoids[whichEllipsoid].xAxis,1,0,0); // (shell bug fix: was whichTriSet)
+                vec3.set(inputEllipsoids[whichEllipsoid].yAxis,0,1,0);
             } // end for all ellipsoids
             break;
     } // end switch
@@ -269,8 +288,6 @@ function loadTexture(url) {
 // set up the webGL environment
 function setupWebGL() {
     
-    // Set up keys
-    document.onkeydown = handleKeyDown; // call this when key pressed
 
 
     var imageCanvas = document.getElementById("myImageCanvas"); // create a 2d canvas
@@ -305,8 +322,9 @@ function setupWebGL() {
  
 } // end setupWebGL
 
-// read models in, load them into webgl buffers
-function loadModels() {
+// read models in, load them into webgl buffers.
+// ellipsoidsURL may be null, meaning render no ellipsoids.
+function loadModels(trianglesURL, ellipsoidsURL) {
     
     // make an ellipsoid, with numLongSteps longitudes.
     // start with a sphere of radius 1 at origin
@@ -392,7 +410,18 @@ function loadModels() {
         } // end catch
     } // end make ellipsoid
     
-    inputTriangles = getJSONFile(INPUT_TRIANGLES_URL,"triangles"); // read in the triangle data
+    // forget any previously loaded scene, so loadModels can be called again (Reload button)
+    vertexBuffers.concat(normalBuffers,uvBuffers,triangleBuffers).forEach(function(b) { gl.deleteBuffer(b); });
+    vertexBuffers = []; normalBuffers = []; uvBuffers = []; triangleBuffers = []; triSetSizes = [];
+    inputTriangles = []; numTriangleSets = 0; inputEllipsoids = []; numEllipsoids = 0;
+    handleKeyDown.modelOn = null; handleKeyDown.whichOn = -1; // nothing selected
+
+    // textures live in the same folder as the json file that names them
+    function folderOf(url) { return url.substring(0, url.lastIndexOf("/")+1); }
+    // add a timestamp so the browser re-downloads the json instead of using a cached copy
+    function noCache(url) { return url + (url.indexOf("?") < 0 ? "?" : "&") + "t=" + Date.now(); }
+
+    inputTriangles = getJSONFile(noCache(trianglesURL),"triangles"); // read in the triangle data
 
     try {
         if (inputTriangles == String.null)
@@ -448,7 +477,7 @@ function loadModels() {
                 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(inputTriangles[whichSet].glUvs),gl.STATIC_DRAW); // data in
 
                 // start loading this set's texture (placeholder pixel until it arrives)
-                inputTriangles[whichSet].glTexture = loadTexture(INPUT_BASE_URL + inputTriangles[whichSet].material.texture);
+                inputTriangles[whichSet].glTexture = loadTexture(folderOf(trianglesURL) + inputTriangles[whichSet].material.texture);
 
                 // set up the triangle index array, adjusting indices across sets
                 inputTriangles[whichSet].glTriangles = []; // flat index list for webgl
@@ -465,7 +494,8 @@ function loadModels() {
 
             } // end for each triangle set 
         
-            inputEllipsoids = getJSONFile(INPUT_ELLIPSOIDS_URL,"ellipsoids"); // read in the ellipsoids
+            // read in the ellipsoids, or use none if they are switched off
+            inputEllipsoids = ellipsoidsURL ? getJSONFile(noCache(ellipsoidsURL),"ellipsoids") : [];
 
             if (inputEllipsoids == String.null)
                 throw "Unable to load ellipsoids file!";
@@ -506,7 +536,7 @@ function loadModels() {
                     gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(ellipsoidModel.uvs),gl.STATIC_DRAW); // data in
 
                     // start loading this ellipsoid's texture
-                    ellipsoid.glTexture = loadTexture(INPUT_BASE_URL + ellipsoid.texture);
+                    ellipsoid.glTexture = loadTexture(folderOf(ellipsoidsURL) + ellipsoid.texture);
 
                     triSetSizes.push(ellipsoidModel.triangles.length);
     
@@ -576,6 +606,9 @@ function setupShaders() {
         uniform vec3 uDiffuse; // the diffuse reflectivity
         uniform vec3 uSpecular; // the specular reflectivity
         uniform float uShininess; // the specular exponent
+
+        // how to combine lighting and texture: 0 modulate, 1 replace, 2 lighting only
+        uniform int uBlendMode;
         
         // geometry properties
         varying vec3 vWorldPos; // world xyz of fragment
@@ -603,12 +636,18 @@ function setupShaders() {
             vec3 specular = uSpecular*uLightSpecular*highlight; // specular term
             
             // combine to output color
-            vec3 colorOut = ambient + diffuse + specular; // no specular yet
+            vec3 litColor = ambient + diffuse + specular; // Blinn-Phong lit color Cf
+            vec4 texColor = texture2D(uTexture, vUV); // texture color Ct
+
+            // Part 3: blend lighting with texture, mode chosen with the b key
+            vec3 colorOut;
+            if (uBlendMode == 0)
+                colorOut = litColor * texColor.rgb; // modulate: C = Cf * Ct
+            else if (uBlendMode == 1)
+                colorOut = texColor.rgb;            // replace: texture only, unlit (Part 2)
+            else
+                colorOut = litColor;                // lighting only, no texture (Program 3)
             gl_FragColor = vec4(colorOut, 1.0);
-            // Part 2: unlit texture -- fragment color comes from the texture only
-            // (colorOut above is unused for now; Part 3 will blend it with the texture)
-            vec4 texColor = texture2D(uTexture, vUV);
-            gl_FragColor = vec4(texColor.rgb, 1.0);
         }
     `;
     
@@ -651,7 +690,8 @@ function setupShaders() {
                 pvmMatrixULoc = gl.getUniformLocation(shaderProgram, "upvmMatrix"); // ptr to pvmmat
                 
                 // locate fragment uniforms
-                var eyePositionULoc = gl.getUniformLocation(shaderProgram, "uEyePosition"); // ptr to eye position
+                eyePositionULoc = gl.getUniformLocation(shaderProgram, "uEyePosition"); // ptr to eye position
+                blendModeULoc = gl.getUniformLocation(shaderProgram, "uBlendMode"); // ptr to blend mode
                 var lightAmbientULoc = gl.getUniformLocation(shaderProgram, "uLightAmbient"); // ptr to light ambient
                 var lightDiffuseULoc = gl.getUniformLocation(shaderProgram, "uLightDiffuse"); // ptr to light diffuse
                 var lightSpecularULoc = gl.getUniformLocation(shaderProgram, "uLightSpecular"); // ptr to light specular
@@ -719,6 +759,10 @@ function renderModels() {
     window.requestAnimationFrame(renderModels); // set up frame render callback
     
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // clear frame/depth buffers
+
+    // per-frame fragment uniforms: the eye moves, and the blend mode can change
+    gl.uniform3fv(eyePositionULoc,Eye); // (shell set this only once, so specular ignored view moves)
+    gl.uniform1i(blendModeULoc,blendMode);
     
     // set up projection and view
     // mat4.fromScaling(hMatrix,vec3.fromValues(-1,1,1)); // create handedness matrix
@@ -796,13 +840,59 @@ function renderModels() {
 } // end render model
 
 
+// PAGE CONTROLS
+
+// (re)load the scene from the URL fields on the page
+function loadScene() {
+    var trianglesURL = document.getElementById("trianglesURL").value.trim();
+    var ellipsoidsURL = document.getElementById("useEllipsoids").checked ?
+        document.getElementById("ellipsoidsURL").value.trim() : null;
+    loadModels(trianglesURL, ellipsoidsURL);
+} // end load scene
+
+// show the current rendering modes on the page
+function showModes() {
+    document.getElementById("blendMode").textContent = BLEND_MODE_NAMES[blendMode];
+} // end show modes
+
+// return the view to its starting position
+function resetView() {
+    vec3.copy(Eye,defaultEye);
+    vec3.copy(Center,defaultCenter);
+    vec3.copy(Up,defaultUp);
+} // end reset view
+
+// fill in the page fields and connect them to the program
+function setupUI() {
+    document.getElementById("trianglesURL").value = INPUT_TRIANGLES_URL;
+    document.getElementById("ellipsoidsURL").value = INPUT_ELLIPSOIDS_URL;
+
+    document.getElementById("reload").onclick = loadScene;
+    document.getElementById("useEllipsoids").onchange = loadScene;
+    document.getElementById("resetView").onclick = resetView;
+    showModes();
+
+    document.addEventListener("keydown", handleKeyDown); // call this when key pressed
+
+    // drop focus from clicked buttons and checkboxes, so space doesn't re-trigger them
+    document.querySelectorAll("button, input[type=checkbox]").forEach(function(el) {
+        el.addEventListener("click", function() { el.blur(); });
+    });
+    // clicking the canvas leaves any typing field, so keys go back to the scene
+    document.getElementById("myWebGLCanvas").addEventListener("mousedown", function() {
+        if (document.activeElement) document.activeElement.blur();
+    });
+} // end setup UI
+
+
 /* MAIN -- HERE is where execution begins after window load */
 
 function main() {
-  
+
   setupWebGL(); // set up the webGL environment
-  loadModels(); // load in the models from tri file
   setupShaders(); // setup the webGL shaders
+  setupUI(); // hook up keys and page fields
+  loadScene(); // load in the models from the files named on the page
   renderModels(); // draw the triangles using webGL
-  
+
 } // end main

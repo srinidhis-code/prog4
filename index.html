@@ -2,8 +2,8 @@
 <html>
   <head>
     <meta charset="UTF-8">
-    <title>Prog 3: Rasterization Solution</title>
-    
+    <title>Prog 4: Texture and Transparency</title>
+
     <link type="text/css" rel="stylesheet" href="rasterize.css">
 
     <script type="text/javascript" src="gl-matrix.js"></script>
@@ -11,7 +11,53 @@
   </head>
 
   <body onload="main();">
-    <canvas id="myImageCanvas" width="512" height="512"></canvas>
-    <canvas id="myWebGLCanvas" width="512" height="512"></canvas> 
+    <fieldset>
+      <legend>Input files (textures load from the same folder)</legend>
+      triangles <input type="text" id="trianglesURL"><br>
+      ellipsoids <input type="text" id="ellipsoidsURL">
+      <label><input type="checkbox" id="useEllipsoids" checked> render</label><br>
+      <button id="reload">Reload</button>
+    </fieldset>
+    <fieldset>
+      <legend>View</legend>
+      <button id="resetView">Reset view</button>
+    </fieldset>
+    <fieldset>
+      <legend>Rendering</legend>
+      <kbd>b</kbd> blend: <b id="blendMode"></b>
+    </fieldset>
+
+    <!-- the sky image canvas sits behind the webgl canvas -->
+    <div id="stage">
+      <canvas id="myImageCanvas" width="512" height="512"></canvas>
+      <canvas id="myWebGLCanvas" width="512" height="512"></canvas>
+    </div>
+
+    <table class="keys">
+      <tr><th colspan="2">Move the view</th><th colspan="2">Select a model</th><th colspan="2">Move the selected model</th></tr>
+      <tr><td><kbd>a</kbd> <kbd>d</kbd></td><td>move left / right</td>
+          <td><kbd>&larr;</kbd> <kbd>&rarr;</kbd></td><td>previous / next triangle set</td>
+          <td><kbd>k</kbd> <kbd>;</kbd></td><td>move left / right</td></tr>
+      <tr><td><kbd>w</kbd> <kbd>s</kbd></td><td>move forward / back</td>
+          <td><kbd>&uarr;</kbd> <kbd>&darr;</kbd></td><td>next / previous ellipsoid</td>
+          <td><kbd>o</kbd> <kbd>l</kbd></td><td>move forward / back</td></tr>
+      <tr><td><kbd>q</kbd> <kbd>e</kbd></td><td>move up / down</td>
+          <td><kbd>space</kbd></td><td>deselect</td>
+          <td><kbd>i</kbd> <kbd>p</kbd></td><td>move up / down</td></tr>
+      <tr><td><kbd>A</kbd> <kbd>D</kbd></td><td>turn left / right (yaw)</td>
+          <td></td><td></td>
+          <td><kbd>K</kbd> <kbd>:</kbd></td><td>turn left / right (yaw)</td></tr>
+      <tr><td><kbd>W</kbd> <kbd>S</kbd></td><td>tilt up / down (pitch)</td>
+          <td></td><td></td>
+          <td><kbd>O</kbd> <kbd>L</kbd></td><td>tilt forward / back (pitch)</td></tr>
+      <tr><td><kbd>Q</kbd> <kbd>E</kbd></td><td>roll</td>
+          <td></td><td></td>
+          <td><kbd>I</kbd> <kbd>P</kbd></td><td>roll</td></tr>
+      <tr><td><kbd>esc</kbd></td><td>reset view</td>
+          <td><kbd>b</kbd></td><td>cycle light / texture blending</td>
+          <td><kbd>backspace</kbd></td><td>reset all models</td></tr>
+    </table>
+    <p class="note">Uppercase keys need Shift. Rotating a model needs one selected first; it is shown 20% larger.
+      Keys are ignored while typing in a field: click the canvas to return to the scene.</p>
   </body>
 </html>

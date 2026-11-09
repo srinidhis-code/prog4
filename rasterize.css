@@ -1,13 +1,16 @@
-#myWebGLCanvas {
-    position: absolute;
-    left: 0px;
-    top: 0px;
-    z-index: 10;
-}
+body { font-family: sans-serif; font-size: 13px; }
+fieldset { display: inline-block; vertical-align: top; margin: 4px; }
+input[type=text] { width: 380px; }
 
-#myImageCanvas {
-    position: absolute;
-    left: 0px;
-    top: 0px;
-    z-index: 0;
-}
+/* the two canvases are stacked: sky image behind, webgl in front */
+#stage { position: relative; width: 512px; height: 512px; margin: 8px 0; border: 1px solid #888; }
+#myImageCanvas { position: absolute; left: 0px; top: 0px; z-index: 0; }
+#myWebGLCanvas { position: absolute; left: 0px; top: 0px; z-index: 10; }
+
+table.keys { border-collapse: collapse; }
+table.keys th { text-align: left; padding: 4px 24px 4px 0; border-bottom: 1px solid #888; }
+table.keys td { padding: 3px 8px 3px 0; }
+table.keys td:nth-child(2n) { padding-right: 32px; }
+kbd { display: inline-block; min-width: 1.2em; padding: 1px 5px; text-align: center;
+      font-family: monospace; border: 1px solid #aaa; border-radius: 3px; background: #f4f4f4; }
+.note { color: #555; }
